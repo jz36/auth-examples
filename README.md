@@ -1,36 +1,104 @@
-## Micronaut 3.7.1 Documentation
+краткий план
 
-- [User Guide](https://docs.micronaut.io/3.7.1/guide/index.html)
-- [API Reference](https://docs.micronaut.io/3.7.1/api/index.html)
-- [Configuration Reference](https://docs.micronaut.io/3.7.1/guide/configurationreference.html)
-- [Micronaut Guides](https://guides.micronaut.io/index.html)
----
+* Приветствие
+* О чем пойдет речь
+* какие провайдеры будут сделаны
+  * OpenID (google)
+  * VK
+  * Yandex
+*Заключение
 
-- [Shadow Gradle Plugin](https://plugins.gradle.org/plugin/com.github.johnrengelman.shadow)
-## Feature http-client documentation
+Добрый день!
 
-- [Micronaut HTTP Client documentation](https://docs.micronaut.io/latest/guide/index.html#httpClient)
+Хочу познакомить вас с модулем аутентификации у Micronaut и заодно продемонстрировать, как настроить OAuth2.0 у нескольких провайдеров.
 
+Для начала немного информации:
 
-## Feature security-oauth2 documentation
+* Micronaut это современный JVM фреймворк, который в данный момент активно разрабатывается. Есть интересная [статья](https://habr.com/ru/post/418117/) про Micronaut. Не смотря на то, что уже 3.8 версия, статья своей актуальности не потеряла.
+* Какие провайдеры будут?
+  * Google (OpenID)
+  * Yandex
+  * VK
+* Что потребуется:
+  * JDK 8+
+  * Micronaut 3.8.0
+  * Ваш любимый редактор кода
+  * Традиционные 15 минут свободного времени
 
-- [Micronaut Security OAuth 2.0 documentation](https://micronaut-projects.github.io/micronaut-security/latest/guide/index.html#oauth)
+## Конфигурация Micronaut
 
+Для того, чтобы собрать проект на Micronaut, можно использовать несколько инструментов:
 
-## Feature security-jwt documentation
+* [Micronaut Launch](https://micronaut.io/launch) - сайт для сбора приложения, аналогичный Spring Initializr.
+* CLI - command line interface от Micronaut.
+* [SDKMAN!](https://sdkman.io/) - инструмент для параллельного менеджмента различных версий одного и того же SDK на одной машине (чаще всего UNIX)
 
-- [Micronaut Security JWT documentation](https://micronaut-projects.github.io/micronaut-security/latest/guide/index.html)
+Я буду использовать первый вариант, потому что мне он кажется самым удобным, особенно для первого запуска. Для этого заходим на сайт, и выбираем нужные зависимости. В данном случае нужно выбрать три зависимости:
 
+* security;
+* security-jwt;
+* security-oauth2
 
-## Feature security documentation
+Так же я использую Lombok, поскольку он позволяет уменьшить количество boilerplate кода. Так что можете добавить его в зависимости тоже.
 
-- [Micronaut Security documentation](https://micronaut-projects.github.io/micronaut-security/latest/guide/index.html)
+Осталось выбрать версию Java и название проекта. Choose what you want.
 
+В итоге должно получиться что-то вроде этого:
 
-## Feature lombok documentation
+//todo insert image
 
-- [Micronaut Project Lombok documentation](https://docs.micronaut.io/latest/guide/index.html#lombok)
+Соответственно, остается только нажать кнопку __Generate Project__, и сайт предложит скачать его или выложить на GitHub. [Тут](https://github.com/jz36/auth-examples) репозиторий на эту статью с примерами кода.
 
-- [https://projectlombok.org/features/all](https://projectlombok.org/features/all)
+## Реализация провайдеров
+
+Для реализации аутентификации через сторонних провайдеров, необходимо для начала зарегестрировать у них приложение, которое и будет осуществлять механизм идентификации пользователя через внешнюю систему. Первым на очереди будет Google. Во-первых, это один из самых популярных сервисов, которые есть в мире, и скорее всего, у большинства ваших потенциальных пользователей есть Google аккаунт. Во-вторых, он реализует особую спецификацию OAuth2.0 под названием OpenID. Вот [хорошая статья](https://habr.com/ru/post/491116/), которая рассказывает об этих стандартах.
+
+Так же давайте добавим некий контроллер, который позволит нам поприветствовать только что аутентифицированного пользователя:
+
+```
+@Controller
+@Secured(SecurityRule.IS_AUTHENTICATED)
+public class MainController {
+
+    @Get
+    public String greeting(Authentication authentication) {
+        return "Hello, " + authentication.getName() + "!";
+    }
+}
+```
+
+Ну а мы приступаем к написанию аутентификации через Google.
+
+### Google
+
+Подробно расписывать получение клиента для аутентификации от Google я не вижу смысла. Как минимум, там относительно простой и интуитивно понятный интерфейс, к тому же в [интернете](https://developers.google.com/identity/sign-in/web/sign-in) уже есть подробное описание всех действий.
+
+Стоит сказать что нужно внимательно отнестись к `callback url`. В процессе аутентификации провайдер сходит на ваш сервер, чтобы узнать, не являетесь ли вы злоумышленником. Сейчас нужно выставить `http://localhost:8080/oauth/callback/google`, но на проде советую так не делать.
+
+//todo вставить изображение по гугл callback
+
+После этого надо переместиться в `application.yml` и прописать `client-secret` и `client-id`, которые показываются после создания Credentials.
+
+```
+micronaut:
+  security:
+    oauth2:
+      clients:
+        google:
+          client-id: your-client-id
+          client-secret: your-client-secret
+          openid:
+            issuer: https://accounts.google.com
+```
+
+В принципе, самый простой вариант уже готов, и вы можете попробовать запустить наше приложение, а затем через браузер сходить на адрес `http://localhost:8080/oauth/login/google`
+
+Таким образом можно увидеть стандартное окошко аутентификации от Google. Уверен, вы видели такое уже не раз. Теперь, если перейти по контроллеру, который мы объявили ранее, можно увидеть что-то вроде этого:
+
+//todo вставить ответ от приложения
+
+### Yandex
+
+Приступим к следующему провайдеру. Для начала так же необходимо клиента в системе Yandex. Для этого можно прочитать [инструкцию](https://yandex.ru/dev/id/doc/dg/oauth/tasks/register-client.html). На самом деле процесс схож с Google. Вводим имя приложения, добавляем
 
 
