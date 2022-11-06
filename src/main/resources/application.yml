@@ -22,6 +22,18 @@ micronaut:
           client-secret: ${GOOGLE_CLIENT_SECRET}
           openid:
             issuer: https://accounts.google.com
+        yandex:
+          client-id: ${YANDEX_CLIENT_ID}
+          client-secret: ${YANDEX_CLIENT_SECRET}
+          authorization:
+            url: https://oauth.yandex.ru/authorize
+          token:
+            url: https://oauth.yandex.ru/token
+            auth-method: client_secret_post
+          scopes:
+            - "login:email"
+            - "login:info"
+            - "login:avatar"
     authentication: cookie
     token:
       jwt:
