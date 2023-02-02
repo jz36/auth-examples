@@ -1,16 +1,4 @@
-краткий план
-
-* Приветствие
-* О чем пойдет речь
-* какие провайдеры будут сделаны
-  * OpenID (google)
-  * Yandex
-* Процесс аутентификации
-*Заключение
-
-Добрый день!
-
-Хочу познакомить вас с модулем аутентификации у Micronaut и заодно продемонстрировать, как настроить OAuth2.0 у нескольких провайдеров.
+Хочу познакомить вас с модулем аутентификации Micronaut и заодно продемонстрировать, как настроить OAuth2.0 у нескольких провайдеров.
 
 Для начала немного информации:
 
@@ -19,7 +7,6 @@
 * Какие провайдеры будут?
   * Google (OpenID)
   * Yandex
-  * VK
 * Что потребуется:
   * JDK 8+
   * Micronaut 3.7.0+
@@ -133,7 +120,7 @@ yandex:
     - "login:avatar"
 ```
 
-Вы могли заметить, что я появился новый еще один параметр, который до этого в статье не упоминался. Это `token.auth-method` - свойство, отвечающее за то, как будет аутентифицироваться наше приложение при выпуске токена в провайдере. Всего в Micronaut описано 7 способов, найти их можно [тут](https://micronaut-projects.github.io/micronaut-security/3.8.0/api/io/micronaut/security/oauth2/endpoint/AuthenticationMethod.html). Вообще, методы аутентификации подробно не описаны в стандарте [RFC 6749](https://tools.ietf.org/html/rfc6749#section-3.2.1), который как раз и описывает работу OAuth2.0. Однако, большинство провайдеров используют `client_secret_post`, в котором `client-id` и `client-secret` передаются в теле запроса, либо же используется `client-secret-basic`, где `client-id` и `client-secret` передаются в виде Basic аутентификации.
+Вы могли заметить, что я появился новый еще один параметр, который до этого в статье не упоминался. Это `token.auth-method` - свойство, отвечающее за то, как будет аутентифицироваться наше приложение при выпуске токена в провайдере. Всего в Micronaut существует 7 способов, найти их можно [тут](https://micronaut-projects.github.io/micronaut-security/3.8.0/api/io/micronaut/security/oauth2/endpoint/AuthenticationMethod.html). Вообще, подробной информации о методах аутентификации нет в стандарте [RFC 6749](https://tools.ietf.org/html/rfc6749#section-3.2.1), который как раз и описывает работу OAuth2.0. Каждый волен делать, как хочет. Однако, большинство провайдеров используют `client_secret_post`, в котором `client-id` и `client-secret` передаются в теле запроса, либо же используется `client-secret-basic`, где ие же параметры передаются в виде Basic аутентификации.
 
 После того как были внесены необходимые параметры в `application.yml`, `Micronaut` требует, чтобы был реализован `OauthAuthenticationMapper`. Давайте к этому и приступим. Данная реализация должна иметь специальную аннотацию `@Named`, в которой значение должно совпадать с именем провайдера, указанного в конфигурационном файле.
 
@@ -233,7 +220,7 @@ DEBUG i.m.s.o.routes.OauthRouteBuilder - Skipped registration of logout route. N
 
 Следующий шаг - это `OauthRouteBuilder`. Он служит дя того, чтобы зарегистрировать контроллеры для всех провайдеров, которые будут настроены. Я добавил еще один провайдер, так что теперь будет создаваться 9 роутов, по одному для инициализации аутентификации и по два на `callback` для каждого провайдера.
 
-Далее, для примера, я буду аутентифицироваться через Yandex.
+Для начала посмотрим, как поведет себя `Micronaut`, когда получит запрос без аутентификации.
 
 ```
 DEBUG i.m.s.t.reader.HttpHeaderTokenReader - Looking for bearer token in Authorization header  #1
@@ -253,5 +240,47 @@ DEBUG i.m.s.a.DefaultAuthorizationExceptionHandler - redirect uri: /  #6
    1. Вообще, `AbstractSecurityRule` выглядит очень логично. Если в объекте `Authentication` нет ничего, то `Micronaut` сообщает, что у данного пользователя есть только `isAnonymous()`. Потом, когда уже происходит вызов метода `compareRoles`, фреймворк просто считывает, что есть только роль анонимуса.
 5. `SecurityFilter` сообщает текущую ситуацию, и какой провайдер правил "принял" такое решение.
 6. Дальше просто сообщение о том, что происходит редирект на заранее определенный путь. Настраивается через конфигурацию.
+
+Далее, для примера, я буду аутентифицироваться через Yandex. Сначала большой разницы не будет, так что я это опущу. Давайте перейдем сразу к интересным моментам.
+
+```
+DEBUG i.m.s.rules.AbstractSecurityRule - The given roles [[isAnonymous()]] matched one or more of the required roles [[isAnonymous()]]. Allowing the request
+DEBUG i.m.security.filters.SecurityFilter - Authorized request GET /oauth/login/yandex. The rule provider io.micronaut.security.rules.SecuredAnnotationRule authorized the request.
+TRACE i.m.s.o.r.DefaultOauthController - Received login request for provider [yandex]
+TRACE i.m.s.o.client.DefaultOauthClient - Starting authorization code grant flow to provider [yandex]. Redirecting to [https://oauth.yandex.ru/authorize]
+TRACE i.m.s.o.e.a.r.DefaultAuthorizationRedirectHandler - Built the authorization URL [https://oauth.yandex.ru/authorize?...]
+```
+
+1. Первая большая разница - данный контроллер принимает анонимных пользователей, что логично, ведь мы хотим залогиниться.
+2. Далее следует информация о том, что получин запрос на логин через Yandex.
+3. `DefaultOauthClient` сообщает о начале _authorization code grant flow_ для Yandex.
+4. В следующем шаге `DefaultAuthorizationRedirectHandler` сообщает о том, что построен специальный авторизационный URL.
+
+Что происходит после? Пользователь получает ответ от сервера, где есть информация о редиректе на этот URL. Там необходимо подтвердить свое желание войти в наже приложение через провайдера (в данном случае, через Yandex).
+
+В следующей пачке логов наконец то произойдет момент аутентификации в нашем приложении! Опять же, будут и стандартные логи, которые мы уже разобрали, так что предлагаю их пропустить, и перейти к интересным моментам:
+
+```
+TRACE i.m.s.o.r.DefaultOauthController - Received callback from oauth provider [yandex]
+TRACE i.m.s.o.client.DefaultOauthClient - Received a successful authorization response from provider [yandex]
+TRACE i.m.s.o.e.a.r.DefaultOauthAuthorizationResponseHandler - Validating state found in the authorization response from provider [yandex]
+TRACE i.m.s.o.e.t.r.DefaultTokenEndpointClient - Sending request to token endpoint [https://oauth.yandex.ru/token]
+TRACE i.m.s.o.e.t.r.DefaultTokenEndpointClient - The token endpoint supports [[client_secret_post]] authentication methods
+TRACE i.m.s.o.e.t.r.DefaultTokenEndpointClient - Using client_secret_post authentication. The client_id and client_secret will be present in the body
+TRACE i.m.s.o.c.c.p.ClientCredentialsHttpClientFilter - Did not find any OAuth 2.0 client which should decorate the request with an access token received from client credentials request
+TRACE i.m.s.o.e.a.r.DefaultOauthAuthorizationResponseHandler - Token endpoint returned a success response. Creating a user details
+TRACE i.m.s.o.c.c.p.ClientCredentialsHttpClientFilter - Did not find any OAuth 2.0 client which should decorate the request with an access token received from client credentials request
+TRACE i.m.s.o.r.DefaultOauthController - Authentication succeeded. User [Иван Зыков] is now logged in
+```
+
+1. Сообщение о том, что получен `callabck` от провайдера Yandex.
+2. Дальше фреймворк сообщает, что получил успешный авторизационный ответ от провайдера.
+3. Логично, что после получения успешного ответа, нужно провалидировать, что же там храниться. Сейчас `state` храниться в cookie пользователя, и нужно сравнить их значения, чтобы убедиться, что ответ получен у верного пользователя.
+4. Следующие три строчки говорят о том, что будет сделан запрос на получение токена пользователя от провайдера. Куда, какого типа будет запрос, и где будут переданы `client_secret` и `client_id`. Собственно, именно для этого ранее был реализован `YandexApiClient`. Возможно, возникнет вопрос, ведь в этом клиенте используется `Get` запрос, а тут написано, что для аутентификации используется `client_secret_post`. Но все достаточно просто. Перед тем, как предоставить информацию о пользователе, провайдеру нужно убедиться, что у нас есть на это право! И для этого наше приложение аутентифицируется у Yandex, получает токен, и только после этого идет за информацией о пользователе.
+5. Применяя различные декораторы (если они есть), приложение обращается к провайдеру уже за данными человека. Если все пройдет успешно, в этот момент включится написанный ранее `YandexUserDetailsMapper` и вернет уже аутентифицированного юзера.
+
+## Заключение
+
+Надеюсь, что эта статья сможет вам помочь в понимании процессов, которые происходят во время аутентификации и авторизации пользователя, если вы используете `Micronaut`. Как можно заметить, события разворачиваются достаточно просто и прямолинейно. Исходники `Micronaut` написаны достаточно хорошо, чтобы читать их, как книгу. Документация так же является достаточно ясной, хоть и на русском ее нет.
 
 
